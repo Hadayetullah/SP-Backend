@@ -8,10 +8,12 @@ class Util:
         email = EmailMessage(
             subject=data['subject'],
             body=data['body'],
-            from_email=os.environ.get('EMAIL_FROM'),
+            from_email=data['from_email'],
             to=[data['to_email']],
             # fail_silently=False,
         )
+        email.content_subtype = "html"
         email.send()
+        #  email.send(fail_silently=False)
         # print(email.from_email)
         # print(email.to)

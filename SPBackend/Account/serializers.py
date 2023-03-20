@@ -76,20 +76,20 @@ class SendPasswordResetEmailSerializer(serializers.Serializer):
             # print(link)
 
             # Email Send
-            body = 'Click the following link to reset your password ' + link
+            body = '<h5 style="font-size:18px;font-weight:bold">Click the below button to reset your password</h5>' + '<div style="margin-left: 10%;"><a style="background:#606060;color:white;font-size:18px;font-weight:bold;cursor:pointer;padding:5px 20px;text-decoration:none" href="' + link + '">Click Here</a></div>'
             data = {
                 'subject': 'Reset Your Password',
                 'body': body,
+                'from_email': "nurul0.amin0@gmail.com",
                 'to_email': user.email
             }
-            # print(data)
             Util.send_email(data)
             return attrs
         else:
             raise serializers.ValidationError("You are not a Registered User")
         
 
-
+       
 class UserPasswordResetSerializer(serializers.Serializer):
     password = serializers.CharField(max_length=128, style={'input_type':'password'}, write_only=True)
     password2 = serializers.CharField(max_length=128, style={'input_type':'password'}, write_only=True)
