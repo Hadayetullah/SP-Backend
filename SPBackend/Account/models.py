@@ -1,4 +1,6 @@
 from django.db import models
+from django.utils import timezone
+
 from django.contrib.auth.models import (
     BaseUserManager, AbstractBaseUser
 )
@@ -16,7 +18,7 @@ class UserManager(BaseUserManager):
         user = self.model(
             name=name,
             email=self.normalize_email(email),
-            phone=phone
+            phone=phone,
         )
 
         user.set_password(password)
@@ -46,6 +48,7 @@ class User(AbstractBaseUser):
         unique=True,
     )
     phone = models.CharField(max_length=20)
+    is_verified = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     is_admin = models.BooleanField(default=False)
     crated_at = models.DateTimeField(auto_now_add=True)
@@ -74,3 +77,14 @@ class User(AbstractBaseUser):
         "Is the user a member of staff?"
         # Simplest possible answer: All admins are staff
         return self.is_admin
+    
+
+
+class Token(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    key = models.CharField(max_length=40, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    def is_valid(self):
+        return self.expires_at > timezone.now()

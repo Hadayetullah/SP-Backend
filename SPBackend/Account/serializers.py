@@ -1,10 +1,13 @@
+from django.utils import timezone
+from uuid import uuid4
 from rest_framework import serializers
-from Account.models import User
+from Account.models import User, Token
 from Account.utils import Util
 
 from django.utils.encoding import smart_str, force_bytes, DjangoUnicodeDecodeError
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from django.contrib.auth.tokens import PasswordResetTokenGenerator
+from django.contrib.auth.tokens import PasswordResetTokenGenerator, default_token_generator
+
 
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
@@ -28,9 +31,58 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        return User.objects.create_user(**validated_data)
+        user = User.objects.create_user(**validated_data)
+        key = str(uuid4())   
+        # print("Key1: ", key)
+        token = Token.objects.create(user=user, key=key, expires_at=timezone.now() + timezone.timedelta(minutes=5))
+        token.save()
+        uid = urlsafe_base64_encode(force_bytes(user.id))
+        token_generator = default_token_generator.make_token(user)
+        link = 'http://localhost:3000/authenticate/' + uid + "/" + token_generator + "/" + key
+        # print("Token Link: ", link)
+        # Send Email
+        body = '<h5 style="font-size:18px;font-weight:bold">Click the below button for verification</h5>' + '<div style="width:100%;"><a style="background:#606060;display:inline-block;margin-left:10%;color:white;font-size:18px;font-weight:bold;cursor:pointer;padding:12px 20px 8px;text-decoration:none;border-radius:3px;" href="' + link + '"><span style="line-height:24px;">Verify</span></a></div>'
+        data = {
+            'subject': 'User Verification',
+            'body': body,
+            'from_email': "nurul0.amin0@gmail.com",
+            'to_email': user.email
+        }
+        Util.send_email(data)
+        return user
     
     
+
+class UserRegistrationVerificatioSerializer(serializers.Serializer):
+    is_verified = serializers.BooleanField()
+    class Meta:
+        fields = ['is_verified']
+
+    def validate(self, attrs):
+        is_verified = attrs.get('is_verified')
+        uid = self.context.get('uid')
+        token = self.context.get('token')
+        key = self.context.get('key')
+
+        id = smart_str(urlsafe_base64_decode(uid))
+        user = User.objects.get(id=id)
+        token_obj = Token.objects.get(user=user, key=key)
+
+        if is_verified == False:
+            raise serializers.ValidationError("Something went wrong!")
+        elif token_obj is not None:
+            if token_obj.is_valid():
+                if default_token_generator.check_token(user, token):
+                    user.is_verified = is_verified
+                    user.save()
+                    return attrs
+                else:
+                    raise serializers.ValidationError("Request is not valid or Request time expired")
+            else:
+                raise serializers.ValidationError("Request Time Expired!")
+        else:
+            raise serializers.ValidationError("Well, Hello - Who are u?")
+        # return attrs
 
 
 class UserLoginSerializer(serializers.ModelSerializer):
@@ -38,6 +90,30 @@ class UserLoginSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['email', 'password']
+
+    def validate(self, attrs):
+        email = attrs.get('email')
+        user = User.objects.get(email=email)
+        if user is not None:
+            if user.is_verified != True:
+                key = str(uuid4())   
+                token = Token.objects.create(user=user, key=key, expires_at=timezone.now() + timezone.timedelta(minutes=5))
+                token.save()
+                uid = urlsafe_base64_encode(force_bytes(user.id))
+                token_generator = default_token_generator.make_token(user)
+                link = 'http://localhost:3000/authenticate/' + uid + "/" + token_generator + "/" + key
+                # print("Token Link: ", link)
+                # Send Email
+                body = '<h5 style="font-size:18px;font-weight:bold">Click the below button for verification</h5>' + '<div style="width:100%;"><a style="background:#606060;display:inline-block;margin-left:10%;color:white;font-size:18px;font-weight:bold;cursor:pointer;padding:12px 20px 8px;text-decoration:none;border-radius:3px;" href="' + link + '"><span style="line-height:24px;">Verify</span></a></div>'
+                data = {
+                    'subject': 'User Verification',
+                    'body': body,
+                    'from_email': "nurul0.amin0@gmail.com",
+                    'to_email': user.email
+                }
+                Util.send_email(data)
+                raise serializers.ValidationError("You are not verified user. Check your email inbox or spam to verify your account.")
+        return attrs
 
 
 
@@ -76,7 +152,7 @@ class SendPasswordResetEmailSerializer(serializers.Serializer):
             # print(link)
 
             # Email Send
-            body = '<h5 style="font-size:18px;font-weight:bold">Click the below button to reset your password</h5>' + '<div style="margin-left: 10%;"><a style="background:#606060;color:white;font-size:18px;font-weight:bold;cursor:pointer;padding:5px 20px;text-decoration:none" href="' + link + '">Click Here</a></div>'
+            body = '<h5 style="font-size:18px;font-weight:bold">Click the below button to reset your password</h5>' + '<div style="width:100%;"><a style="background:#606060;display:inline-block;margin-left:10%;color:white;font-size:18px;font-weight:bold;cursor:pointer;padding:12px 20px 8px;text-decoration:none;border-radius:3px;" href="' + link + '"><span style="line-height:24px;">Click Here</span></a></div>'
             data = {
                 'subject': 'Reset Your Password',
                 'body': body,
@@ -114,7 +190,7 @@ class UserPasswordResetSerializer(serializers.Serializer):
             user.save()
             return attrs
         except DjangoUnicodeDecodeError as indentifier:
-            raise serializers.ValidationError("Password and Confirm Password doesn't match")
+            raise serializers.ValidationError("Something went wrong")
     
 
     
